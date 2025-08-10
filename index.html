@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>每日倒數時鐘｜今天還剩多少時間</title>
+  <meta name="theme-color" content="#0a0a0a">
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html, body { height: 100%; }
+    .num { font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+  </style>
+</head>
+<body class="min-h-screen w-full bg-neutral-950 text-neutral-100 flex items-center justify-center p-6">
+  <main class="w-full max-w-3xl">
+    <header class="mb-6 flex items-center justify-between">
+      <h1 class="text-2xl md:text-3xl font-semibold tracking-tight">每日倒數時鐘</h1>
+      <div id="nowText" class="text-sm opacity-70"></div>
+    </header>
+
+    <!-- Card: Today until midnight -->
+    <section class="bg-neutral-900/70 border border-neutral-800 rounded-2xl p-6 mb-6 shadow-xl">
+      <div class="flex items-baseline gap-3 mb-2">
+        <h2 class="text-lg md:text-xl font-medium">今天還剩</h2>
+        <span class="text-xs px-2 py-0.5 rounded-full bg-neutral-800 border border-neutral-700">到 24:00（午夜）</span>
+      </div>
+      <div id="midnightClock" class="text-5xl md:text-7xl num tracking-tight select-none">--:--:--</div>
+      <div class="mt-4">
+        <div class="h-2 w-full bg-neutral-800 rounded-full overflow-hidden">
+          <div id="midnightBar" class="h-full bg-white/90" style="width:0%"></div>
+        </div>
+        <div id="midnightPct" class="mt-2 text-xs opacity-70">今日剩餘 0%</div>
+      </div>
+    </section>
+
+    <!-- Card: Custom end-of-day -->
+    <section class="bg-neutral-900/70 border border-neutral-800 rounded-2xl p-6 shadow-xl">
+      <div class="flex flex-wrap items-center gap-3 mb-3">
+        <h3 class="text-base md:text-lg font-medium">自訂「結束時間」</h3>
+        <input id="customInput" type="time"
+               class="bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-neutral-500"
+               step="60">
+        <span class="text-xs opacity-70">（例如 23:00 = 睡前 / 收工時間）</span>
+      </div>
+      <div id="customClock" class="text-3xl md:text-5xl num tracking-tight select-none">--:--:--</div>
+      <div class="mt-4">
+        <div class="h-2 w-full bg-neutral-800 rounded-full overflow-hidden">
+          <div id="customBar" class="h-full bg-white/90" style="width:0%"></div>
+        </div>
+        <div id="customPct" class="mt-2 text-xs opacity-70">距離 24:00 剩餘 0%</div>
+      </div>
+      <div id="customOver" class="mt-2 text-xs hidden">
+        <span class="ml-0 inline-block px-2 py-0.5 rounded-full bg-neutral-800 border border-neutral-700">今天已超過此時間</span>
+      </div>
+    </section>
+
+    <footer class="mt-6 text-xs opacity-60 leading-relaxed">
+      小提示：時間以你的裝置時區顯示。自訂時間會保存在此瀏覽器的本機。
+    </footer>
+  </main>
+
+  <script>
+    const nowText = document.getElementById('nowText');
+    const midnightClock = document.getElementById('midnightClock');
+    const midnightBar = document.getElementById('midnightBar');
+    const midnightPct = document.getElementById('midnightPct');
+
+    const customInput = document.getElementById('customInput');
+    const customClock = document.getElementById('customClock');
+    const customBar = document.getElementById('customBar');
+    const customPct = document.getElementById('customPct');
+    const customOver = document.getElementById('customOver');
+
+    // load saved hh:mm or default 24:00
+    const saved = localStorage.getItem('daily-countdown-target') || '24:00';
+    customInput.value = saved;
+
+    customInput.addEventListener('change', () => {
+      localStorage.setItem('daily-countdown-target', customInput.value);
+      tick(); // refresh immediately
+    });
+
+    function startOfToday(d = new Date()) {
+      const t = new Date(d);
+      t.setHours(0,0,0,0);
+      return t;
+    }
+    function endOfToday(d = new Date()) {
+      const t = new Date(d);
+      t.setHours(24,0,0,0);
+      return t;
+    }
+    function formatHMS(ms) {
+      if (ms < 0) ms = 0;
+      const total = Math.floor(ms / 1000);
+      const h = String(Math.floor(total/3600)).padStart(2,'0');
+      const m = String(Math.floor((total%3600)/60)).padStart(2,'0');
+      const s = String(total%60).padStart(2,'0');
+      return `${h}:${m}:${s}`;
+    }
+    function percentLeft(remaining, total) {
+      if (total <= 0) return 0;
+      const p = (remaining / total) * 100;
+      return Math.max(0, Math.min(100, p));
+    }
+    function customTargetToday(hhmm) {
+      const [h, m] = hhmm.split(':').map(v => parseInt(v,10));
+      const now = new Date();
+      const t = new Date(now);
+      t.setHours(isNaN(h)?24:h, isNaN(m)?0:m, 0, 0);
+      return t;
+    }
+
+    function tick() {
+      const now = new Date();
+      nowText.textContent = new Intl.DateTimeFormat(undefined, { dateStyle:'full', timeStyle:'medium' }).format(now);
+
+      // Midnight countdown
+      const endMid = endOfToday();
+      const remainingMid = Math.max(0, endMid - now);
+      midnightClock.textContent = formatHMS(remainingMid);
+
+      const totalDay = endOfToday(startOfToday()) - startOfToday();
+      const elapsed = now - startOfToday();
+      const leftPct = percentLeft(totalDay - elapsed, totalDay);
+      midnightBar.style.width = leftPct.toFixed(4) + '%';
+      midnightPct.textContent = `今日剩餘 ${leftPct.toFixed(1)}%`;
+
+      // Custom countdown
+      const target = customTargetToday(customInput.value || '24:00');
+      const remainingCustom = Math.max(0, target - now);
+      customClock.textContent = formatHMS(remainingCustom);
+
+      const customTotal = Math.max(0, target - startOfToday());
+      const customPctVal = percentLeft(remainingCustom, customTotal || 1);
+      customBar.style.width = customPctVal.toFixed(4) + '%';
+      customPct.textContent = `距離 ${customInput.value || '24:00'} 剩餘 ${customPctVal.toFixed(1)}%`;
+
+      if (remainingCustom <= 0 && customTotal > 0) {
+        customOver.classList.remove('hidden');
+      } else {
+        customOver.classList.add('hidden');
+      }
+    }
+
+    tick();
+    setInterval(tick, 250);
+  </script>
+</body>
+</html>
